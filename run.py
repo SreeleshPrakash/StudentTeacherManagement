@@ -13,6 +13,22 @@ with app.app_context():
     db.create_all()
 
 
+@app.route('/users', methods=['GET'])
+def get_allusers():
+    try:
+        users = User.query.filter(User.isdelete == False).all()
+        if not users:
+            return jsonify({"message": "User not found"}), 404
+
+        response = [{"id": user.id, "name": user.name,
+                     "age": user.age} for user in users]
+
+        return jsonify(response), 201
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
 @app.route('/users', methods=['POST'])
 def create_user():
     data = request.json
@@ -193,12 +209,13 @@ def map_student_to_teacher():
     student_id = data.get('student_id')
     teacher_id = data.get('teacher_id')
 
-    student = User.query.get(id=student_id, category="student")
-    teacher = User.query.get(id=teacher_id, category="teacher")
-    if not teacher or teacher.isdelete or not student or student.isdelete:
+    student = User.query.filter_by(
+        id=student_id, category="student", isdelete=False).first()
+    teacher = User.query.filter_by(
+        id=teacher_id, category="teacher", isdelete=False).first()
+    if not teacher or not student:
         return jsonify({"message": "User not found"}), 404
 
-    # Check if mapping already exists
     existing_mapping = UserMapping.query.filter_by(
         student_id=student_id, teacher_id=teacher_id, isdelete=False).first()
     if existing_mapping:
@@ -218,19 +235,21 @@ def map_multiple_students_to_teacher():
     teacher_id = data.get('teacher_id')
     student_ids = data.get('student_ids', [])
 
-    teacher = User.query.get(id=teacher_id, category="teacher")
-    if not teacher or teacher.isdelete:
+    teacher = User.query.filter_by(
+        id=teacher_id, category="teacher", isdelete=False).first()
+    if not teacher:
         return jsonify({"message": "Teacher not found"}), 404
 
     user_notfound = []
     existing_mappings = []
 
     for student_id in student_ids:
-        user = User.query.get(id=student_id, category="student")
-        if not user or user.isdelete:
+        user = User.query.filter_by(
+            id=student_id, category="student", isdelete=False).first()
+        if not user:
             user_notfound.append(student_id)
+            continue
 
-        # Check if mapping already exists
         if UserMapping.query.filter_by(student_id=student_id, teacher_id=teacher_id, isdelete=False).first():
             existing_mappings.append(student_id)
 
@@ -241,9 +260,9 @@ def map_multiple_students_to_teacher():
             "user_notfound": user_notfound
         }), 400
 
-    # Mapp students with the teacher
     new_mappings = [
         UserMapping(student_id=student_id, teacher_id=teacher_id) for student_id in student_ids
+        if student_id not in existing_mappings and student_id not in user_notfound
     ]
     db.session.bulk_save_objects(new_mappings)
     db.session.commit()
