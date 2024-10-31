@@ -1,1 +1,1 @@
-# StudentTeacher_Management
+# StudentTeacherManagement
